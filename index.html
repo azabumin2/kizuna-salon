@@ -392,6 +392,35 @@
     let unsubProfile = null;
     let unsubMessages = null;
     let unsubPresence = null;
+    let roomCloseTimer = null;   // 開催時間になったら自動退室させるためのタイマー
+
+    // 開始何分前から入室できるようにするか(分)
+    const ENTRY_BUFFER_MINUTES = 10;
+
+    // 「本日 20:00」のように、その日/翌日の指定した時刻の Date オブジェクトを作る補助関数
+    // (このサンプルでは分かりやすさのため「本日・明日」からの相対時刻にしています。
+    //  実際の運用では、この部分を各回の本当の開催日時に置き換えてご利用ください。)
+    function todayAt(hour, minute) {
+      const d = new Date();
+      d.setHours(hour, minute, 0, 0);
+      return d;
+    }
+    function tomorrowAt(hour, minute) {
+      const d = todayAt(hour, minute);
+      d.setDate(d.getDate() + 1);
+      return d;
+    }
+
+    // 現在時刻から、その会話室が「開始前 / まもなく開始(入室可) / 開催中 / 終了」の
+    // どの状態かを判定する(表示上の文字ではなく、実際の時刻で判定します)
+    function getEventPhase(evt) {
+      const now = Date.now();
+      const bufferMs = ENTRY_BUFFER_MINUTES * 60 * 1000;
+      if (now < evt.startAt.getTime() - bufferMs) return 'before';
+      if (now < evt.startAt.getTime()) return 'opening_soon';
+      if (now <= evt.endAt.getTime()) return 'live';
+      return 'ended';
+    }
 
     // 開催予定のサロン一覧(このアプリでは管理者がこの配列を直接編集して更新します)
     const sampleEvents = [
@@ -400,9 +429,10 @@
         category: 'hobby',
         title: '【クラシック音楽】名曲の背景と指揮者のこだわりを語り合う夕べ',
         time: '本日 20:00 〜 21:00',
+        startAt: todayAt(20, 0),
+        endAt: todayAt(21, 0),
         speakers: '高橋 恵子 様（音楽ライター / 60代）',
         maxParticipants: 50,
-        status: 'live',
         image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
         desc: 'ベートーヴェンやモーツァルトの逸話を交えながら、皆様の好きな一枚を語り合いましょう。'
       },
@@ -411,9 +441,10 @@
         category: 'travel',
         title: '【東京・京都散歩】カメラを片手に巡る歴史と四季の絶景スポット',
         time: '本日 21:30 〜 22:30',
+        startAt: todayAt(21, 30),
+        endAt: todayAt(22, 30),
         speakers: '山本 達郎 様（写真家 / 70代）',
         maxParticipants: 50,
-        status: 'upcoming',
         image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=500&auto=format&fit=crop&q=80',
         desc: 'シニア世代に優しい歩きやすい散策ルートと、スマホでも綺麗に撮れる写真のテクニック。'
       },
@@ -422,9 +453,10 @@
         category: 'health',
         title: '【健康・長寿】毎朝5分で体が軽くなる優しいストレッチと薬膳茶',
         time: '明日 10:00 〜 11:00',
+        startAt: tomorrowAt(10, 0),
+        endAt: tomorrowAt(11, 0),
         speakers: '小林 真理子 先生（健康指導士）',
         maxParticipants: 50,
-        status: 'upcoming',
         image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=500&auto=format&fit=crop&q=80',
         desc: '無理のない動きで関節をほぐし、季節の変わり目に負けない健康的な暮らしのコツを共有。'
       },
@@ -433,9 +465,10 @@
         category: 'hobby',
         title: '【庭づくり・ベランダ園芸】季節のお花と家庭菜園の楽しみ方',
         time: '明日 14:00 〜 15:00',
+        startAt: tomorrowAt(14, 0),
+        endAt: tomorrowAt(15, 0),
         speakers: '渡辺 健二 様（園芸愛好家 / 68歳）',
         maxParticipants: 50,
-        status: 'upcoming',
         image: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=500&auto=format&fit=crop&q=80',
         desc: '小さな鉢植えから始めるハーブ作りや、お花の長持ちの秘訣について情報交換しましょう。'
       }
@@ -631,16 +664,22 @@
 
     function renderEventsGrid(events) {
       const grid = document.getElementById('events-grid');
-      grid.innerHTML = events.map(evt => `
+      grid.innerHTML = events.map(evt => { const phase = getEventPhase(evt); return `
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition flex flex-col justify-between">
           <div>
             <div class="relative h-48 w-full overflow-hidden bg-slate-100">
               <img src="${evt.image}" alt="${escapeHtml(evt.title)}" class="w-full h-full object-cover" />
               <div class="absolute top-3 left-3 flex space-x-2">
-                ${evt.status === 'live'
+                ${phase === 'live'
                   ? `<span class="bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center shadow">
                       <span class="w-2 h-2 bg-white rounded-full mr-1.5 animate-ping"></span> 開催中 (LIVE)
                      </span>`
+                  : phase === 'opening_soon'
+                  ? `<span class="bg-amber-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center shadow">
+                      <span class="w-2 h-2 bg-white rounded-full mr-1.5 animate-ping"></span> まもなく開始・入室受付中
+                     </span>`
+                  : phase === 'ended'
+                  ? `<span class="bg-slate-400 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm">終了しました</span>`
                   : `<span class="bg-slate-800/80 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm">受付中</span>`
                 }
               </div>
@@ -663,16 +702,23 @@
 
           <div class="p-5 pt-0">
             <button onclick="tryEnterRoom('${evt.id}')" class="w-full py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 transition ${
-              evt.status === 'live'
+              (phase === 'live' || phase === 'opening_soon')
                 ? 'bg-salon-primary hover:bg-slate-800 text-white shadow-md'
+                : phase === 'ended'
+                ? 'bg-slate-100 border border-slate-300 text-slate-400'
                 : 'bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900'
             }">
-              <i data-lucide="${evt.status === 'live' ? 'log-in' : 'calendar-check'}" class="w-4 h-4"></i>
-              <span>${evt.status === 'live' ? 'この会話室に参加する' : '事前予約・詳細を見る'}</span>
+              <i data-lucide="${(phase === 'live' || phase === 'opening_soon') ? 'log-in' : (phase === 'ended' ? 'x-circle' : 'calendar-check')}" class="w-4 h-4"></i>
+              <span>${
+                phase === 'live' ? 'この会話室に参加する'
+                : phase === 'opening_soon' ? '入室する(まもなく開始)'
+                : phase === 'ended' ? '終了しました'
+                : '事前予約・詳細を見る'
+              }</span>
             </button>
           </div>
         </div>
-      `).join('');
+      `; }).join('');
       lucide.createIcons();
     }
 
@@ -706,6 +752,18 @@
     async function tryEnterRoom(eventId) {
       if (!isConfigured) { alert('Firebase の設定が完了していません。SETUP_GUIDE.md をご確認ください。'); return; }
       const evt = sampleEvents.find(e => e.id === eventId);
+
+      const phase = getEventPhase(evt);
+      if (phase === 'before') {
+        const minutesLeft = Math.ceil((evt.startAt.getTime() - ENTRY_BUFFER_MINUTES * 60 * 1000 - Date.now()) / 60000);
+        alert(`この会話室はまだ入室受付前です。開始時刻(${evt.time})の${ENTRY_BUFFER_MINUTES}分前から入室できます。あと約${Math.max(minutesLeft, 1)}分ほどお待ちください。`);
+        return;
+      }
+      if (phase === 'ended') {
+        alert('この回は終了しました。またの機会にぜひご参加ください。');
+        return;
+      }
+
       currentRoom = evt;
 
       let user = auth.currentUser;
@@ -768,6 +826,15 @@
 
       subscribeRoom(evt.id);
       speakText(`絆サロン、「${evt.title}」へようこそ。ごゆっくり会話をお楽しみください。`);
+
+      // 終了予定時刻になったら自動的に退室させる
+      if (roomCloseTimer) clearInterval(roomCloseTimer);
+      roomCloseTimer = setInterval(() => {
+        if (currentRoom && Date.now() > currentRoom.endAt.getTime()) {
+          showToast('終了予定時刻になりましたので、この会話室を退室します。ご参加ありがとうございました。');
+          leaveRoom();
+        }
+      }, 15000);
     }
 
     function subscribeRoom(roomId) {
@@ -799,6 +866,7 @@
     }
 
     async function leaveRoom() {
+      if (roomCloseTimer) { clearInterval(roomCloseTimer); roomCloseTimer = null; }
       if (isConfigured && currentRoom && auth.currentUser) {
         db.collection('rooms').doc(currentRoom.id).collection('presence').doc(auth.currentUser.uid).delete().catch(() => {});
       }
