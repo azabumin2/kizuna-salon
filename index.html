@@ -450,6 +450,11 @@
       renderUserStatus();
       if (isConfigured) {
         updateLiveCounts();
+        auth.getRedirectResult().catch(err => {
+          if (err && err.code && err.code !== 'auth/no-auth-event') {
+            alert('ログインできませんでした: ' + err.message);
+          }
+        });
         auth.onAuthStateChanged(onAuthChanged);
       }
     });
@@ -466,10 +471,40 @@
           renderUserStatus();
         });
         await handlePaymentReturn(user);
+        await resumePendingAction();
       } else {
         myProfile = null;
       }
       renderUserStatus();
+    }
+
+    // スマートフォンのブラウザ判定(ポップアップ方式のログインが不安定なため、
+    // スマホでは signInWithRedirect(リダイレクト方式)に切り替える)
+    function isMobileDevice() {
+      return /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+    }
+
+    // リダイレクトでログイン画面に移動する前に、「元々何をしようとしていたか」を
+    // 保存しておき、ログインから戻ってきた後に自動的に続きの動作をする仕組み
+    function savePendingAction(action) {
+      try { localStorage.setItem('kizuna_pending_action', JSON.stringify(action)); } catch (e) {}
+    }
+    function takePendingAction() {
+      try {
+        const raw = localStorage.getItem('kizuna_pending_action');
+        if (!raw) return null;
+        localStorage.removeItem('kizuna_pending_action');
+        return JSON.parse(raw);
+      } catch (e) { return null; }
+    }
+    async function resumePendingAction() {
+      const action = takePendingAction();
+      if (!action) return;
+      if (action.type === 'enterRoom' && action.eventId) {
+        await tryEnterRoom(action.eventId);
+      } else if (action.type === 'payment') {
+        openPaymentModal();
+      }
     }
 
     async function ensureUserDoc(user) {
@@ -493,6 +528,14 @@
     function loginWithGoogle() {
       if (!isConfigured) { alert('Firebase の設定が完了していません。SETUP_GUIDE.md をご確認ください。'); return Promise.reject(); }
       const provider = new firebase.auth.GoogleAuthProvider();
+      if (isMobileDevice()) {
+        // スマホのブラウザではポップアップ方式が固まってしまうことがあるため、
+        // ページ遷移(リダイレクト)方式でログインする
+        return auth.signInWithRedirect(provider).catch(err => {
+          alert('ログインできませんでした: ' + err.message);
+          throw err;
+        });
+      }
       return auth.signInWithPopup(provider).catch(err => {
         alert('ログインできませんでした: ' + err.message);
         throw err;
@@ -667,6 +710,11 @@
 
       let user = auth.currentUser;
       if (!user) {
+        if (isMobileDevice()) {
+          savePendingAction({ type: 'enterRoom', eventId });
+          loginWithGoogle();
+          return;
+        }
         try {
           const cred = await loginWithGoogle();
           user = cred.user;
@@ -779,7 +827,11 @@
     // =====================================================================
     function openPaymentModal() {
       if (!isConfigured) { alert('Firebase の設定が完了していません。SETUP_GUIDE.md をご確認ください。'); return; }
-      if (!auth.currentUser) { loginWithGoogle(); return; }
+      if (!auth.currentUser) {
+        if (isMobileDevice()) { savePendingAction({ type: 'payment' }); }
+        loginWithGoogle();
+        return;
+      }
       document.getElementById('payment-modal').classList.remove('hidden');
     }
     function closePaymentModal() {
@@ -788,7 +840,11 @@
 
     function goToCheckout() {
       const user = auth.currentUser;
-      if (!user) { loginWithGoogle(); return; }
+      if (!user) {
+        if (isMobileDevice()) { savePendingAction({ type: 'payment' }); }
+        loginWithGoogle();
+        return;
+      }
 
       const plan = document.querySelector('input[name="plan"]:checked').value;
       const link = plan === 'monthly' ? STRIPE_PAYMENT_LINK_MONTHLY : STRIPE_PAYMENT_LINK_TICKET;
