@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>絆(きずな)サロン - 大人のための会員制オンライン交流広場</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts for Elegant Japanese Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Shippori+Mincho:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- ============================================================
+       Firebase (無料の Spark プラン枠内で動作します)
+       Authentication と Firestore(リアルタイムDB) を使って
+       複数会員による本物のリアルタイムチャットを実現します。
+       設定方法は付属の SETUP_GUIDE.md を参照してください。
+       ============================================================ -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            salon: {
+              bg: '#FDFBF7',       // Warm traditional paper white
+              card: '#FFFFFF',
+              primary: '#1B365D',  // Deep Indigo / Navy (Trust & Elegance)
+              accent: '#C59B27',   // Muted Gold
+              crimson: '#8B263E',  // Japanese Traditional Crimson
+              text: '#2C3E50',     // Clear dark text for legibility
+              muted: '#64748B',
+              green: '#2D6A4F'
+            }
+          },
+          fontFamily: {
+            sans: ['"Noto Sans JP"', 'sans-serif'],
+            serif: ['"Shippori Mincho"', 'serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #FDFBF7;
+      color: #2C3E50;
+      font-family: "Noto Sans JP", sans-serif;
+      line-height: 1.7;
+      word-break: keep-all;
+    }
+
+    /* Font Size Scaling Classes for Senior Accessibility */
+    .text-scale-1 { font-size: 100%; }
+    .text-scale-2 { font-size: 115%; }
+    .text-scale-3 { font-size: 130%; }
+
+    /* Custom Scrollbar for Chat */
+    .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .live-pulse { animation: pulse-ring 2s infinite ease-in-out; }
+  </style>
+</head>
+
+<body class="h-full flex flex-col text-scale-2 transition-all duration-200">
+  <!-- Top Navigation Bar -->
+  <header class="bg-salon-primary text-white shadow-md sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('schedule')">
+        <div class="bg-salon-accent text-salon-primary p-2 rounded-xl flex items-center justify-center font-bold font-serif text-xl">
+          絆
+        </div>
+        <div>
+          <h1 class="font-serif font-bold text-xl md:text-2xl leading-tight tracking-wide flex items-center">
+            絆サロン <span class="text-xs bg-salon-crimson text-white px-2 py-0.5 rounded-full ml-2 font-sans font-normal">有料会員制</span>
+          </h1>
+          <p class="text-xs text-slate-300 hidden sm:block">60代からの上質な出会いと会話を楽しむ大人の広場</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 md:space-x-4">
+        <div class="hidden md:flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700">
+          <span class="text-xs text-slate-300 px-2">文字サイズ:</span>
+          <button onclick="setFontScale(1)" id="btn-scale-1" class="px-2 py-1 text-xs rounded hover:bg-slate-700 font-bold">標準</button>
+          <button onclick="setFontScale(2)" id="btn-scale-2" class="px-2 py-1 text-xs rounded bg-salon-accent text-slate-900 font-bold">大</button>
+          <button onclick="setFontScale(3)" id="btn-scale-3" class="px-2 py-1 text-xs rounded hover:bg-slate-700 font-bold">特大</button>
+        </div>
+
+        <div id="user-status-container" class="flex items-center">
+          <!-- Dynamically populated JS -->
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="bg-amber-100 border-b border-amber-200 text-amber-900 px-4 py-2 text-center text-sm flex items-center justify-center space-x-2">
+    <i data-lucide="sparkles" class="w-4 h-4 text-amber-700 shrink-0"></i>
+    <span>アクティブシニアのための安心・安全な定員50名限定プレミアムサロンです。</span>
+  </div>
+
+  <!-- 未設定時の警告バナー(Firebase未設定のままだと表示されます) -->
+  <div id="config-warning" class="hidden bg-red-100 border-b border-red-300 text-red-800 px-4 py-2 text-center text-xs md:text-sm">
+    ⚠️ Firebase の設定がまだ完了していません。SETUP_GUIDE.md の手順に沿って firebaseConfig を入力してください。ログインとチャットは動作しません。
+  </div>
+
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 gap-6">
+
+    <!-- TAB 1: UPCOMING SCHEDULE & SALON LIST -->
+    <section id="tab-schedule" class="space-y-6">
+
+      <div class="bg-gradient-to-r from-salon-primary to-slate-800 text-white rounded-2xl p-6 md:p-8 shadow-lg border-l-8 border-salon-accent relative overflow-hidden">
+        <div class="relative z-10 max-w-2xl">
+          <span class="inline-block bg-salon-accent text-slate-900 text-xs font-bold px-3 py-1 rounded-full mb-3">
+            本日開催のサロン案内
+          </span>
+          <h2 class="text-2xl md:text-3xl font-serif font-bold mb-3 leading-snug">
+            心豊かな時間を共にする、<br class="hidden sm:inline"/>落ち着いた大人のオンライン会話室
+          </h2>
+          <p class="text-slate-200 text-base mb-4">
+            趣味の語り合いから旅の思い出、健康の知恵まで。定員50名のあたたかい空間で、音声と文字で自由にご参加いただけます。
+          </p>
+          <div class="flex flex-wrap gap-3 text-sm text-amber-200">
+            <span class="flex items-center"><i data-lucide="shield-check" class="w-4 h-4 mr-1"></i> 会員制ログイン制</span>
+            <span class="flex items-center"><i data-lucide="volume-2" class="w-4 h-4 mr-1"></i> 声でも文字でもOK</span>
+            <span class="flex items-center"><i data-lucide="users" class="w-4 h-4 mr-1"></i> 1部屋最大50名</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between border-b border-slate-200 pb-3 flex-wrap gap-3">
+        <h3 class="font-serif font-bold text-xl text-salon-primary flex items-center">
+          <i data-lucide="calendar" class="w-5 h-5 mr-2 text-salon-accent"></i> 開催予定のテーマ一覧
+        </h3>
+        <div class="flex space-x-2 text-sm">
+          <button onclick="filterCategory('all')" class="cat-btn active bg-salon-primary text-white px-4 py-2 rounded-full font-medium">すべて</button>
+          <button onclick="filterCategory('hobby')" class="cat-btn bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-full hover:bg-slate-50">趣味・文化</button>
+          <button onclick="filterCategory('health')" class="cat-btn bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-full hover:bg-slate-50">健康・ライフ</button>
+          <button onclick="filterCategory('travel')" class="cat-btn bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-full hover:bg-slate-50">旅行・散歩</button>
+        </div>
+      </div>
+
+      <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Javascript dynamic rendering -->
+      </div>
+    </section>
+
+    <!-- TAB 2: LIVE ROOM -->
+    <section id="tab-liveroom" class="hidden space-y-4">
+
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+          <button onclick="leaveRoom()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 p-2 rounded-xl flex items-center text-sm font-bold transition">
+            <i data-lucide="arrow-left" class="w-5 h-5 mr-1"></i> 退出する
+          </button>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded flex items-center">
+                <span class="w-2 h-2 bg-white rounded-full mr-1 animate-ping"></span> LIVE
+              </span>
+              <h2 id="live-room-title" class="font-serif font-bold text-lg md:text-xl text-salon-primary">-</h2>
+            </div>
+            <p id="live-room-time" class="text-xs text-slate-500"></p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-4">
+          <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl text-sm font-medium flex items-center">
+            <i data-lucide="users" class="w-4 h-4 mr-1.5 text-emerald-600"></i>
+            <span>参加中: <strong id="live-room-count">0</strong> / <span id="live-room-max">50</span>名</span>
+          </div>
+
+          <button id="tts-toggle-btn" onclick="toggleTTS()" class="bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-xl text-sm font-medium flex items-center hover:bg-indigo-100">
+            <i data-lucide="volume-2" class="w-4 h-4 mr-1 text-indigo-600"></i>
+            <span id="tts-status-text">音声読み上げ: ON</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <div class="lg:col-span-2 space-y-6">
+
+          <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
+              <i data-lucide="mic" class="w-4 h-4 mr-1.5 text-salon-crimson"></i> ナビゲーター
+            </h3>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+              <div id="host-speaker-card" class="bg-amber-50 border-2 border-salon-accent/40 rounded-2xl p-4 text-center relative overflow-hidden shadow-sm">
+                <span class="absolute top-2 right-2 bg-salon-accent text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded">主催者</span>
+                <div class="relative w-16 h-16 mx-auto mb-2">
+                  <div class="w-full h-full bg-slate-200 text-slate-500 rounded-full flex items-center justify-center font-bold text-xl">案</div>
+                </div>
+                <h4 id="host-speaker-name" class="font-bold text-slate-800 text-sm">-</h4>
+                <p class="text-xs text-slate-500 mb-2">サロンナビゲーター</p>
+              </div>
+
+              <!-- Current User Card -->
+              <div id="my-speaker-card" class="bg-indigo-50/60 border border-indigo-200 rounded-2xl p-4 text-center relative">
+                <span class="absolute top-2 right-2 bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">あなた</span>
+                <div class="relative w-16 h-16 mx-auto mb-2">
+                  <div class="w-full h-full bg-salon-primary text-white rounded-full flex items-center justify-center font-bold text-xl border-2 border-indigo-300">
+                    私
+                  </div>
+                </div>
+                <h4 id="my-speaker-name" class="font-bold text-slate-800 text-sm">会員(あなた)</h4>
+                <p id="my-mic-status-label" class="text-xs text-slate-500 mb-2">聴講中</p>
+                <button onclick="toggleMyMic()" id="btn-toggle-mic" class="inline-flex items-center text-xs text-slate-700 bg-white border border-slate-300 px-2.5 py-1 rounded-full font-bold shadow-sm hover:bg-slate-100 transition">
+                  <i data-lucide="hand" class="w-3.5 h-3.5 mr-1 text-salon-accent"></i> 挙手して発言
+                </button>
+              </div>
+            </div>
+
+            <p class="text-xs text-slate-400 mb-4 bg-slate-50 border border-slate-100 rounded-xl p-3">
+              ※ 音声通話(複数人でのリアルタイム通話)は今回のバージョンには含まれていません。まずはリアルタイムの文字チャットでの交流を実現しています。マイクボタンは「発言の合図」としてご利用いただけます。
+            </p>
+
+            <div class="bg-slate-800 text-white rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center space-x-3">
+                <button onclick="toggleMyMic()" id="bar-mic-btn" class="bg-red-500 hover:bg-red-600 text-white p-3 rounded-xl flex items-center space-x-2 font-bold text-sm transition">
+                  <i data-lucide="mic-off" class="w-5 h-5"></i>
+                  <span id="bar-mic-text">マイクOFF</span>
+                </button>
+                <span class="text-xs text-slate-300 hidden sm:inline">ボタンを押して挙手の状態を切り替えられます</span>
+              </div>
+
+              <div class="flex items-center space-x-2">
+                <span class="text-xs text-slate-300 mr-1 hidden md:inline">リアクション:</span>
+                <button onclick="sendEmoji('👏')" class="bg-slate-700 hover:bg-slate-600 p-2 rounded-lg text-lg transition">👏</button>
+                <button onclick="sendEmoji('🌸')" class="bg-slate-700 hover:bg-slate-600 p-2 rounded-lg text-lg transition">🌸</button>
+                <button onclick="sendEmoji('☕')" class="bg-slate-700 hover:bg-slate-600 p-2 rounded-lg text-lg transition">☕</button>
+                <button onclick="sendEmoji('👍')" class="bg-slate-700 hover:bg-slate-600 p-2 rounded-lg text-lg transition">👍</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span><i data-lucide="users" class="w-4 h-4 mr-1.5 inline text-salon-primary"></i> 参加中の会員の皆様</span>
+              <span class="text-xs font-normal text-slate-400">マナーを守って楽しく会話しましょう</span>
+            </h3>
+            <div id="audience-grid" class="grid grid-cols-4 sm:grid-cols-6 gap-3">
+              <!-- Realtime rendered from Firestore presence -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Column: Live Text Chat Box (Firestore realtime) -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[580px]">
+
+          <div class="p-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl flex items-center justify-between">
+            <h3 class="font-bold text-slate-800 text-base flex items-center">
+              <i data-lucide="message-square" class="w-5 h-5 mr-2 text-salon-primary"></i> 会話・コメント
+            </h3>
+            <span class="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-medium">文字表示: 大</span>
+          </div>
+
+          <div id="chat-messages-container" class="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar bg-slate-50/50"></div>
+
+          <form onsubmit="handleSendChat(event)" class="p-3 bg-white border-t border-slate-200 rounded-b-2xl flex items-center space-x-2">
+            <input
+              type="text"
+              id="chat-input"
+              placeholder="メッセージを入力（大きい文字）..."
+              class="flex-1 bg-slate-100 border border-slate-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-salon-primary"
+              required
+            />
+            <button type="submit" class="bg-salon-primary hover:bg-slate-800 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center shrink-0 shadow transition">
+              <i data-lucide="send" class="w-5 h-5"></i>
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- PAYMENT & MEMBERSHIP MODAL -->
+  <div id="payment-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto">
+
+      <button onclick="closePaymentModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="text-center mb-6">
+        <div class="w-14 h-14 bg-amber-100 text-salon-accent rounded-2xl flex items-center justify-center mx-auto mb-3 font-serif font-bold text-2xl border border-amber-200">
+          絆
+        </div>
+        <h3 class="font-serif text-2xl font-bold text-salon-primary mb-1">サロン参加のご案内</h3>
+        <p class="text-sm text-slate-500">本サロンは安心・安全を保つための有料会員制サービスです</p>
+      </div>
+
+      <div class="space-y-4 mb-6">
+        <label class="block cursor-pointer">
+          <input type="radio" name="plan" value="monthly" checked class="peer hidden" />
+          <div class="border-2 border-slate-200 peer-checked:border-salon-accent peer-checked:bg-amber-50/50 rounded-2xl p-4 transition relative">
+            <span class="absolute top-3 right-3 bg-salon-crimson text-white text-[10px] font-bold px-2 py-0.5 rounded-full">一番人気</span>
+            <div class="flex justify-between items-center mb-1">
+              <h4 class="font-bold text-slate-800 text-base">月額プレミアム会員</h4>
+              <span class="text-xl font-bold text-salon-primary">￥3,300 <span class="text-xs font-normal text-slate-500">/月 (税込)</span></span>
+            </div>
+            <p class="text-xs text-slate-600">全テーマのサロン参加が定額で放題</p>
+          </div>
+        </label>
+
+        <label class="block cursor-pointer">
+          <input type="radio" name="plan" value="ticket" class="peer hidden" />
+          <div class="border-2 border-slate-200 peer-checked:border-salon-accent peer-checked:bg-amber-50/50 rounded-2xl p-4 transition">
+            <div class="flex justify-between items-center mb-1">
+              <h4 class="font-bold text-slate-800 text-base">1回参加チケット</h4>
+              <span class="text-xl font-bold text-slate-800">￥550 <span class="text-xs font-normal text-slate-500">/1回</span></span>
+            </div>
+            <p class="text-xs text-slate-600">お好きな時に1回だけ参加できるお試しチケット</p>
+          </div>
+        </label>
+      </div>
+
+      <p class="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-3 mb-6">
+        「お支払いへ進む」を押すと、Stripe(ストライプ)の安全な決済画面に移動します。決済方法(クレジットカード等)はその画面で選択します。
+      </p>
+
+      <button onclick="goToCheckout()" class="w-full bg-salon-primary hover:bg-slate-800 text-white font-bold py-4 rounded-2xl text-lg shadow-lg flex items-center justify-center space-x-2 transition">
+        <i data-lucide="lock" class="w-5 h-5 text-salon-accent"></i>
+        <span>お支払いへ進む</span>
+      </button>
+
+      <p class="text-[11px] text-slate-400 text-center mt-3">
+        ※ テストモードの場合、実際の請求は発生しません。
+      </p>
+
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    // 1) 設定エリア - ここを自分の Firebase / Stripe の値に書き換えてください
+    //    手順は付属の SETUP_GUIDE.md を参照
+    // =====================================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyADvQZhtLe_YbeQ-r-ViiONPIHm2t27VfM",
+      authDomain: "kizuna-salon-ed00a.firebaseapp.com",
+      projectId: "kizuna-salon-ed00a",
+      storageBucket: "kizuna-salon-ed00a.firebasestorage.app",
+      messagingSenderId: "1098115953493",
+      appId: "1:1098115953493:web:0fcfe314ee9a667593b5dc"
+    };
+
+    // Stripe の「Payment Link」(決済リンク)。テストモードで作成したものを貼り付けてください。
+    const STRIPE_PAYMENT_LINK_MONTHLY = "https://buy.stripe.com/test_6oU9AT52j9lygup33n5c402"; // 月額プレミアム会員
+    const STRIPE_PAYMENT_LINK_TICKET  = "https://buy.stripe.com/test_4gMfZh7argO0a61bzT5c401"; // 1回参加チケット
+
+    const isConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";
+    if (isConfigured) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const auth = isConfigured ? firebase.auth() : null;
+    const db = isConfigured ? firebase.firestore() : null;
+
+    // =====================================================================
+    // 2) アプリの状態
+    // =====================================================================
+    let fontScale = 2;
+    let currentRoom = null;
+    let isMicOn = false;
+    let isTTSOn = true;
+    let myProfile = null;         // Firestore: users/{uid} のキャッシュ
+    let chatMessages = [];
+    let audienceList = [];
+    let unsubProfile = null;
+    let unsubMessages = null;
+    let unsubPresence = null;
+
+    // 開催予定のサロン一覧(このアプリでは管理者がこの配列を直接編集して更新します)
+    const sampleEvents = [
+      {
+        id: 'room-1',
+        category: 'hobby',
+        title: '【クラシック音楽】名曲の背景と指揮者のこだわりを語り合う夕べ',
+        time: '本日 20:00 〜 21:00',
+        speakers: '高橋 恵子 様（音楽ライター / 60代）',
+        maxParticipants: 50,
+        status: 'live',
+        image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
+        desc: 'ベートーヴェンやモーツァルトの逸話を交えながら、皆様の好きな一枚を語り合いましょう。'
+      },
+      {
+        id: 'room-2',
+        category: 'travel',
+        title: '【東京・京都散歩】カメラを片手に巡る歴史と四季の絶景スポット',
+        time: '本日 21:30 〜 22:30',
+        speakers: '山本 達郎 様（写真家 / 70代）',
+        maxParticipants: 50,
+        status: 'upcoming',
+        image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=500&auto=format&fit=crop&q=80',
+        desc: 'シニア世代に優しい歩きやすい散策ルートと、スマホでも綺麗に撮れる写真のテクニック。'
+      },
+      {
+        id: 'room-3',
+        category: 'health',
+        title: '【健康・長寿】毎朝5分で体が軽くなる優しいストレッチと薬膳茶',
+        time: '明日 10:00 〜 11:00',
+        speakers: '小林 真理子 先生（健康指導士）',
+        maxParticipants: 50,
+        status: 'upcoming',
+        image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=500&auto=format&fit=crop&q=80',
+        desc: '無理のない動きで関節をほぐし、季節の変わり目に負けない健康的な暮らしのコツを共有。'
+      },
+      {
+        id: 'room-4',
+        category: 'hobby',
+        title: '【庭づくり・ベランダ園芸】季節のお花と家庭菜園の楽しみ方',
+        time: '明日 14:00 〜 15:00',
+        speakers: '渡辺 健二 様（園芸愛好家 / 68歳）',
+        maxParticipants: 50,
+        status: 'upcoming',
+        image: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=500&auto=format&fit=crop&q=80',
+        desc: '小さな鉢植えから始めるハーブ作りや、お花の長持ちの秘訣について情報交換しましょう。'
+      }
+    ];
+
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      if (!isConfigured) {
+        document.getElementById('config-warning').classList.remove('hidden');
+      }
+      renderEventsGrid(sampleEvents);
+      renderUserStatus();
+      if (isConfigured) {
+        updateLiveCounts();
+        auth.onAuthStateChanged(onAuthChanged);
+      }
+    });
+
+    // =====================================================================
+    // 3) 認証(ログイン) まわり
+    // =====================================================================
+    async function onAuthChanged(user) {
+      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
+      if (user) {
+        await ensureUserDoc(user);
+        unsubProfile = db.collection('users').doc(user.uid).onSnapshot(snap => {
+          myProfile = snap.data();
+          renderUserStatus();
+        });
+        await handlePaymentReturn(user);
+      } else {
+        myProfile = null;
+      }
+      renderUserStatus();
+    }
+
+    async function ensureUserDoc(user) {
+      const ref = db.collection('users').doc(user.uid);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        const data = {
+          name: user.displayName || '会員',
+          email: user.email || '',
+          isPaidMember: false,
+          ticketCredits: 0,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await ref.set(data);
+        return data;
+      }
+      return snap.data();
+    }
+
+    function loginWithGoogle() {
+      if (!isConfigured) { alert('Firebase の設定が完了していません。SETUP_GUIDE.md をご確認ください。'); return Promise.reject(); }
+      const provider = new firebase.auth.GoogleAuthProvider();
+      return auth.signInWithPopup(provider).catch(err => {
+        alert('ログインできませんでした: ' + err.message);
+        throw err;
+      });
+    }
+
+    function logout() {
+      leaveRoom();
+      auth.signOut();
+    }
+
+    // Stripe の決済リンクから戻ってきた時に ?paid=monthly / ?paid=ticket を検知して会員種別を更新
+    // ご注意: これはテスト・デモ段階の簡易な仕組みです。本番運用の前には
+    // サーバー側(Cloud Functions 等)で Stripe の Webhook を検証してから
+    // Firestore を更新する方式に置き換えることを強くおすすめします。
+    async function handlePaymentReturn(user) {
+      const params = new URLSearchParams(window.location.search);
+      const paid = params.get('paid');
+      if (!paid) return;
+      try {
+        if (paid === 'monthly') {
+          await db.collection('users').doc(user.uid).set({
+            isPaidMember: true,
+            plan: 'monthly',
+            memberSince: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        } else if (paid === 'ticket') {
+          await db.collection('users').doc(user.uid).set({
+            ticketCredits: firebase.firestore.FieldValue.increment(1)
+          }, { merge: true });
+        }
+        showToast('お支払いが完了しました。ありがとうございます！');
+      } finally {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+
+    // =====================================================================
+    // 4) 画面描画
+    // =====================================================================
+    function setFontScale(scale) {
+      fontScale = scale;
+      document.body.classList.remove('text-scale-1', 'text-scale-2', 'text-scale-3');
+      document.body.classList.add(`text-scale-${scale}`);
+      document.querySelectorAll('[id^="btn-scale-"]').forEach((btn, idx) => {
+        btn.className = (idx + 1 === scale)
+          ? "px-2 py-1 text-xs rounded bg-salon-accent text-slate-900 font-bold"
+          : "px-2 py-1 text-xs rounded hover:bg-slate-700 font-bold";
+      });
+    }
+
+    function renderUserStatus() {
+      const container = document.getElementById('user-status-container');
+      const user = isConfigured ? auth.currentUser : null;
+
+      if (!isConfigured) {
+        container.innerHTML = `<span class="text-xs text-red-200">未設定</span>`;
+        return;
+      }
+
+      if (!user) {
+        container.innerHTML = `
+          <button onclick="loginWithGoogle()" class="bg-white text-salon-primary font-bold px-4 py-1.5 rounded-xl text-sm shadow transition flex items-center space-x-1">
+            <i data-lucide="log-in" class="w-4 h-4"></i><span>Googleでログイン</span>
+          </button>`;
+        lucide.createIcons();
+        return;
+      }
+
+      let badge;
+      if (myProfile && myProfile.isPaidMember) {
+        badge = `<div class="flex items-center space-x-1 bg-amber-500/20 border border-amber-400 text-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    <i data-lucide="crown" class="w-4 h-4 text-amber-300"></i><span>有料ゴールド会員</span></div>`;
+      } else if (myProfile && myProfile.ticketCredits > 0) {
+        badge = `<div class="flex items-center space-x-1 bg-sky-500/20 border border-sky-400 text-sky-200 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    <i data-lucide="ticket" class="w-4 h-4"></i><span>チケット ${myProfile.ticketCredits}枚</span></div>`;
+      } else {
+        badge = `<button onclick="openPaymentModal()" class="bg-salon-accent hover:bg-yellow-500 text-slate-900 font-bold px-4 py-1.5 rounded-xl text-sm shadow transition flex items-center space-x-1">
+                    <i data-lucide="user-check" class="w-4 h-4"></i><span>会員登録・決済</span></button>`;
+      }
+
+      container.innerHTML = `
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-slate-200 hidden sm:inline">${escapeHtml(user.displayName || '')} 様</span>
+          ${badge}
+          <button onclick="logout()" class="text-xs text-slate-400 hover:text-white underline">ログアウト</button>
+        </div>`;
+      lucide.createIcons();
+    }
+
+    function renderEventsGrid(events) {
+      const grid = document.getElementById('events-grid');
+      grid.innerHTML = events.map(evt => `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition flex flex-col justify-between">
+          <div>
+            <div class="relative h-48 w-full overflow-hidden bg-slate-100">
+              <img src="${evt.image}" alt="${escapeHtml(evt.title)}" class="w-full h-full object-cover" />
+              <div class="absolute top-3 left-3 flex space-x-2">
+                ${evt.status === 'live'
+                  ? `<span class="bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center shadow">
+                      <span class="w-2 h-2 bg-white rounded-full mr-1.5 animate-ping"></span> 開催中 (LIVE)
+                     </span>`
+                  : `<span class="bg-slate-800/80 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm">受付中</span>`
+                }
+              </div>
+              <span id="count-${evt.id}" class="absolute bottom-3 right-3 bg-slate-900/80 text-amber-300 text-xs font-bold px-2.5 py-1 rounded-lg backdrop-blur-sm flex items-center">
+                - / ${evt.maxParticipants}名
+              </span>
+            </div>
+
+            <div class="p-5">
+              <div class="text-xs text-salon-crimson font-bold mb-1 flex items-center">
+                <i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> ${evt.time}
+              </div>
+              <h4 class="font-serif font-bold text-slate-800 text-lg mb-2 leading-snug">${escapeHtml(evt.title)}</h4>
+              <p class="text-xs text-slate-600 mb-3 line-clamp-2">${escapeHtml(evt.desc)}</p>
+              <div class="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <strong>ナビゲーター:</strong> ${escapeHtml(evt.speakers)}
+              </div>
+            </div>
+          </div>
+
+          <div class="p-5 pt-0">
+            <button onclick="tryEnterRoom('${evt.id}')" class="w-full py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 transition ${
+              evt.status === 'live'
+                ? 'bg-salon-primary hover:bg-slate-800 text-white shadow-md'
+                : 'bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900'
+            }">
+              <i data-lucide="${evt.status === 'live' ? 'log-in' : 'calendar-check'}" class="w-4 h-4"></i>
+              <span>${evt.status === 'live' ? 'この会話室に参加する' : '事前予約・詳細を見る'}</span>
+            </button>
+          </div>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    // 各サロンの現在の参加人数を(スナップショットではなく)一度だけ取得して表示
+    async function updateLiveCounts() {
+      for (const evt of sampleEvents) {
+        try {
+          const snap = await db.collection('rooms').doc(evt.id).collection('presence').get();
+          const el = document.getElementById(`count-${evt.id}`);
+          if (el) el.innerText = `${snap.size} / ${evt.maxParticipants}名`;
+        } catch (e) { /* 権限やネットワークエラーは静かに無視 */ }
+      }
+    }
+
+    function filterCategory(cat) {
+      document.querySelectorAll('.cat-btn').forEach(btn => {
+        btn.classList.remove('active', 'bg-salon-primary', 'text-white');
+        btn.classList.add('bg-white', 'border', 'border-slate-300', 'text-slate-700');
+      });
+      event.target.classList.add('active', 'bg-salon-primary', 'text-white');
+      event.target.classList.remove('bg-white', 'border', 'border-slate-300', 'text-slate-700');
+
+      const filtered = cat === 'all' ? sampleEvents : sampleEvents.filter(e => e.category === cat);
+      renderEventsGrid(filtered);
+      if (isConfigured) updateLiveCounts();
+    }
+
+    // =====================================================================
+    // 5) 入室(ログイン確認 → 会員資格確認 → 満席確認 → 入室)
+    // =====================================================================
+    async function tryEnterRoom(eventId) {
+      if (!isConfigured) { alert('Firebase の設定が完了していません。SETUP_GUIDE.md をご確認ください。'); return; }
+      const evt = sampleEvents.find(e => e.id === eventId);
+      currentRoom = evt;
+
+      let user = auth.currentUser;
+      if (!user) {
+        try {
+          const cred = await loginWithGoogle();
+          user = cred.user;
+        } catch (e) { return; }
+      }
+
+      const profile = myProfile || await ensureUserDoc(user);
+
+      if (!(profile.isPaidMember || profile.ticketCredits > 0)) {
+        openPaymentModal();
+        return;
+      }
+
+      // 満席チェック
+      const presenceSnap = await db.collection('rooms').doc(evt.id).collection('presence').get();
+      if (presenceSnap.size >= evt.maxParticipants && !presenceSnap.docs.some(d => d.id === user.uid)) {
+        alert('申し訳ございません。この会話室はただいま満席です。');
+        return;
+      }
+
+      // チケット会員は入室時に1枚消費(月額会員は消費なし)
+      if (!profile.isPaidMember && profile.ticketCredits > 0) {
+        await db.collection('users').doc(user.uid).update({
+          ticketCredits: firebase.firestore.FieldValue.increment(-1)
+        });
+      }
+
+      await enterRoom(evt, user);
+    }
+
+    async function enterRoom(evt, user) {
+      switchTab('liveroom');
+      document.getElementById('live-room-title').innerText = evt.title;
+      document.getElementById('live-room-time').innerText = `${evt.time} 開催中`;
+      document.getElementById('live-room-max').innerText = evt.maxParticipants;
+      document.getElementById('host-speaker-name').innerText = evt.speakers;
+      document.getElementById('my-speaker-name').innerText = `${user.displayName || '会員'} 様(あなた)`;
+
+      await db.collection('rooms').doc(evt.id).collection('presence').doc(user.uid).set({
+        name: user.displayName || '会員',
+        joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      subscribeRoom(evt.id);
+      speakText(`絆サロン、「${evt.title}」へようこそ。ごゆっくり会話をお楽しみください。`);
+    }
+
+    function subscribeRoom(roomId) {
+      unsubMessages = db.collection('rooms').doc(roomId).collection('messages')
+        .orderBy('createdAt', 'asc').limitToLast(100)
+        .onSnapshot(snap => {
+          const prevLen = chatMessages.length;
+          chatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          renderChatMessages();
+          const last = chatMessages[chatMessages.length - 1];
+          if (last && chatMessages.length > prevLen && auth.currentUser && last.uid !== auth.currentUser.uid) {
+            speakText(last.text);
+          }
+        });
+
+      unsubPresence = db.collection('rooms').doc(roomId).collection('presence')
+        .onSnapshot(snap => {
+          audienceList = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+          document.getElementById('live-room-count').innerText = audienceList.length;
+          renderAudienceGrid();
+        });
+    }
+
+    function unsubscribeRoom() {
+      if (unsubMessages) { unsubMessages(); unsubMessages = null; }
+      if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+      chatMessages = [];
+      audienceList = [];
+    }
+
+    async function leaveRoom() {
+      if (isConfigured && currentRoom && auth.currentUser) {
+        db.collection('rooms').doc(currentRoom.id).collection('presence').doc(auth.currentUser.uid).delete().catch(() => {});
+      }
+      unsubscribeRoom();
+      switchTab('schedule');
+      if (isMicOn) toggleMyMic();
+      currentRoom = null;
+      if (isConfigured) updateLiveCounts();
+    }
+
+    // ブラウザを閉じる際のベストエフォート退室(確実ではありません。詳細は SETUP_GUIDE.md 参照)
+    window.addEventListener('beforeunload', () => {
+      if (isConfigured && currentRoom && auth && auth.currentUser) {
+        db.collection('rooms').doc(currentRoom.id).collection('presence').doc(auth.currentUser.uid).delete().catch(() => {});
+      }
+    });
+
+    function switchTab(tab) {
+      document.getElementById('tab-schedule').classList.toggle('hidden', tab !== 'schedule');
+      document.getElementById('tab-liveroom').classList.toggle('hidden', tab !== 'liveroom');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // =====================================================================
+    // 6) 決済(Stripe Payment Link へリダイレクト)
+    // =====================================================================
+    function openPaymentModal() {
+      if (!isConfigured) { alert('Firebase の設定が完了していません。SETUP_GUIDE.md をご確認ください。'); return; }
+      if (!auth.currentUser) { loginWithGoogle(); return; }
+      document.getElementById('payment-modal').classList.remove('hidden');
+    }
+    function closePaymentModal() {
+      document.getElementById('payment-modal').classList.add('hidden');
+    }
+
+    function goToCheckout() {
+      const user = auth.currentUser;
+      if (!user) { loginWithGoogle(); return; }
+
+      const plan = document.querySelector('input[name="plan"]:checked').value;
+      const link = plan === 'monthly' ? STRIPE_PAYMENT_LINK_MONTHLY : STRIPE_PAYMENT_LINK_TICKET;
+
+      if (!link || link.includes('YOUR_') || link.includes('XXXX') || link.includes('YYYY')) {
+        alert('Stripe の決済リンクがまだ設定されていません。SETUP_GUIDE.md の手順をご確認ください。');
+        return;
+      }
+
+      const url = new URL(link);
+      url.searchParams.set('client_reference_id', user.uid);
+      if (user.email) url.searchParams.set('prefilled_email', user.email);
+      window.location.href = url.toString();
+    }
+
+    // =====================================================================
+    // 7) 発言(マイク挙手の合図) / 音声読み上げ
+    // =====================================================================
+    function toggleMyMic() {
+      isMicOn = !isMicOn;
+      const statusLabel = document.getElementById('my-mic-status-label');
+      const btnMic = document.getElementById('btn-toggle-mic');
+      const barMicBtn = document.getElementById('bar-mic-btn');
+      const barMicText = document.getElementById('bar-mic-text');
+
+      if (isMicOn) {
+        statusLabel.innerText = "発言中（挙手中）";
+        statusLabel.className = "text-xs text-emerald-600 font-bold mb-2 animate-pulse";
+        btnMic.className = "inline-flex items-center text-xs text-white bg-emerald-600 px-2.5 py-1 rounded-full font-bold shadow-sm";
+        btnMic.innerHTML = `<i data-lucide="mic" class="w-3.5 h-3.5 mr-1"></i> 挙手をやめる`;
+        barMicBtn.className = "bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-xl flex items-center space-x-2 font-bold text-sm transition";
+        barMicText.innerText = "挙手中";
+      } else {
+        statusLabel.innerText = "聴講中";
+        statusLabel.className = "text-xs text-slate-500 mb-2";
+        btnMic.className = "inline-flex items-center text-xs text-slate-700 bg-white border border-slate-300 px-2.5 py-1 rounded-full font-bold shadow-sm hover:bg-slate-100 transition";
+        btnMic.innerHTML = `<i data-lucide="hand" class="w-3.5 h-3.5 mr-1 text-salon-accent"></i> 挙手して発言`;
+        barMicBtn.className = "bg-red-500 hover:bg-red-600 text-white p-3 rounded-xl flex items-center space-x-2 font-bold text-sm transition";
+        barMicText.innerText = "マイクOFF";
+      }
+      lucide.createIcons();
+    }
+
+    function toggleTTS() {
+      isTTSOn = !isTTSOn;
+      document.getElementById('tts-status-text').innerText = `音声読み上げ: ${isTTSOn ? 'ON' : 'OFF'}`;
+      if (!isTTSOn && window.speechSynthesis) window.speechSynthesis.cancel();
+    }
+
+    function speakText(text) {
+      if (!isTTSOn || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ja-JP';
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // =====================================================================
+    // 8) チャット描画・送信(Firestore リアルタイム)
+    // =====================================================================
+    function renderAudienceGrid() {
+      const container = document.getElementById('audience-grid');
+      if (audienceList.length === 0) {
+        container.innerHTML = `<p class="col-span-full text-xs text-slate-400 text-center py-2">まだ参加者がいません</p>`;
+        return;
+      }
+      container.innerHTML = audienceList.map(aud => `
+        <div class="bg-slate-50 border border-slate-100 rounded-xl p-2.5 text-center flex flex-col items-center justify-center hover:bg-amber-50/50 transition">
+          <div class="w-10 h-10 bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-xs mb-1">
+            ${escapeHtml((aud.name || '会').substring(0, 1))}
+          </div>
+          <span class="text-xs font-bold text-slate-800 truncate w-full">${escapeHtml(aud.name || '会員')}</span>
+        </div>
+      `).join('');
+    }
+
+    function formatTime(ts) {
+      if (!ts || !ts.toDate) return '...';
+      const d = ts.toDate();
+      return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    }
+
+    function renderChatMessages() {
+      const container = document.getElementById('chat-messages-container');
+      const myUid = auth.currentUser ? auth.currentUser.uid : null;
+      container.innerHTML = chatMessages.map(msg => {
+        const isMine = msg.uid === myUid;
+        return `
+        <div class="flex flex-col items-start">
+          <div class="flex items-center space-x-2 mb-1">
+            <span class="text-xs font-bold ${isMine ? 'text-indigo-700' : 'text-slate-700'}">${escapeHtml(msg.name || '会員')}</span>
+            <span class="text-[10px] text-slate-400">${formatTime(msg.createdAt)}</span>
+          </div>
+          <div class="p-3 rounded-2xl text-base max-w-[90%] ${
+            isMine
+              ? 'bg-indigo-50 border border-indigo-200 text-slate-900 rounded-tl-none font-medium'
+              : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'
+          }">${escapeHtml(msg.text || '')}</div>
+        </div>`;
+      }).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function handleSendChat(evt) {
+      evt.preventDefault();
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text || !currentRoom || !auth.currentUser) return;
+      input.value = '';
+      try {
+        await db.collection('rooms').doc(currentRoom.id).collection('messages').add({
+          uid: auth.currentUser.uid,
+          name: auth.currentUser.displayName || '会員',
+          text,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (err) {
+        alert('送信に失敗しました: ' + err.message);
+      }
+    }
+
+    async function sendEmoji(emoji) {
+      if (!currentRoom || !auth.currentUser) return;
+      await db.collection('rooms').doc(currentRoom.id).collection('messages').add({
+        uid: auth.currentUser.uid,
+        name: auth.currentUser.displayName || '会員',
+        text: `${emoji}（リアクション）`,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // =====================================================================
+    // 9) 小さなユーティリティ
+    // =====================================================================
+    function showToast(message) {
+      const notification = document.createElement('div');
+      notification.className = "fixed bottom-5 right-5 bg-emerald-700 text-white px-6 py-4 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 text-sm font-bold border border-emerald-500";
+      notification.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6 text-amber-300"></i><span>${escapeHtml(message)}</span>`;
+      document.body.appendChild(notification);
+      lucide.createIcons();
+      setTimeout(() => notification.remove(), 4000);
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.innerText = String(str == null ? '' : str);
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
