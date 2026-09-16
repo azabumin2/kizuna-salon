@@ -480,6 +480,7 @@
           email: user.email || '',
           isPaidMember: false,
           ticketCredits: 0,
+          freeTrialUsed: false,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
         await ref.set(data);
@@ -567,6 +568,9 @@
       } else if (myProfile && myProfile.ticketCredits > 0) {
         badge = `<div class="flex items-center space-x-1 bg-sky-500/20 border border-sky-400 text-sky-200 px-3 py-1.5 rounded-xl text-xs font-bold">
                     <i data-lucide="ticket" class="w-4 h-4"></i><span>チケット ${myProfile.ticketCredits}枚</span></div>`;
+      } else if (myProfile && !myProfile.freeTrialUsed) {
+        badge = `<div class="flex items-center space-x-1 bg-emerald-500/20 border border-emerald-400 text-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    <i data-lucide="gift" class="w-4 h-4"></i><span>初回無料体験あり</span></div>`;
       } else {
         badge = `<button onclick="openPaymentModal()" class="bg-salon-accent hover:bg-yellow-500 text-slate-900 font-bold px-4 py-1.5 rounded-xl text-sm shadow transition flex items-center space-x-1">
                     <i data-lucide="user-check" class="w-4 h-4"></i><span>会員登録・決済</span></button>`;
@@ -670,7 +674,10 @@
 
       const profile = myProfile || await ensureUserDoc(user);
 
-      if (!(profile.isPaidMember || profile.ticketCredits > 0)) {
+      const hasAccess = profile.isPaidMember || profile.ticketCredits > 0;
+      const canUseFreeTrial = !hasAccess && !profile.freeTrialUsed;
+
+      if (!hasAccess && !canUseFreeTrial) {
         openPaymentModal();
         return;
       }
@@ -682,11 +689,16 @@
         return;
       }
 
-      // チケット会員は入室時に1枚消費(月額会員は消費なし)
+      // チケット会員は入室時に1枚消費(月額会員は消費なし)、初回無料体験は1回だけ使用可
       if (!profile.isPaidMember && profile.ticketCredits > 0) {
         await db.collection('users').doc(user.uid).update({
           ticketCredits: firebase.firestore.FieldValue.increment(-1)
         });
+      } else if (canUseFreeTrial) {
+        await db.collection('users').doc(user.uid).update({
+          freeTrialUsed: true
+        });
+        showToast('初回無料体験として入室します。次回からは有料会員登録が必要です。');
       }
 
       await enterRoom(evt, user);
