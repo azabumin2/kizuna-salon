@@ -136,12 +136,12 @@
             心豊かな時間を共にする、<br class="hidden sm:inline"/>落ち着いた大人のオンライン会話室
           </h2>
           <p class="text-slate-200 text-base mb-4">
-            趣味の語り合いから旅の思い出、健康の知恵まで。定員50名のあたたかい空間で、文字チャットを中心に自由にご参加いただけます（音声入力機能は準備中です）。
+            趣味の語り合いから旅の思い出、健康の知恵まで。定員50名のあたたかい空間で、文字チャットを中心に自由にご参加いただけます（お話しいただくと文字に変わる音声入力にも対応）。
           </p>
           <div class="flex flex-wrap gap-3 text-sm text-amber-200">
             <span class="flex items-center"><i data-lucide="shield-check" class="w-4 h-4 mr-1"></i> 会員制ログイン制</span>
             <span class="flex items-center"><i data-lucide="keyboard" class="w-4 h-4 mr-1"></i> 文字チャットで気軽に参加</span>
-            <span class="flex items-center"><i data-lucide="mic" class="w-4 h-4 mr-1"></i> 音声入力機能 準備中</span>
+            <span class="flex items-center"><i data-lucide="mic" class="w-4 h-4 mr-1"></i> 音声で入力もOK</span>
             <span class="flex items-center"><i data-lucide="users" class="w-4 h-4 mr-1"></i> 1部屋最大50名</span>
             <span class="flex items-center"><i data-lucide="gift" class="w-4 h-4 mr-1"></i> 初回無料体験あり</span>
           </div>
@@ -280,6 +280,15 @@
           <div id="chat-messages-container" class="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar bg-slate-50/50"></div>
 
           <form onsubmit="handleSendChat(event)" class="p-3 bg-white border-t border-slate-200 rounded-b-2xl flex items-center space-x-2">
+            <button
+              type="button"
+              id="voice-input-btn"
+              onclick="toggleVoiceInput()"
+              title="音声で入力する"
+              class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-3 rounded-xl flex items-center justify-center shrink-0 transition"
+            >
+              <i data-lucide="mic" class="w-5 h-5"></i>
+            </button>
             <input
               type="text"
               id="chat-input"
@@ -1018,6 +1027,92 @@
       }).join('');
       container.scrollTop = container.scrollHeight;
     }
+
+    // =====================================================================
+    // 8.5) 音声受け付け(音声入力 → 文字に変換して入力欄に反映)
+    //    ※ これは Agora 等を使った「会員同士の音声通話」とは別の機能です。
+    //    ブラウザに内蔵された音声認識(Web Speech API)を使い、話した内容を
+    //    その場で文字に変換して入力欄に入れるだけなので、新しいアカウント登録や
+    //    追加費用は一切かかりません。対応ブラウザは主に Google Chrome / Edge です。
+    // =====================================================================
+    let speechRecognizer = null;
+    let isVoiceInputActive = false;
+
+    function getSpeechRecognitionClass() {
+      return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    }
+
+    function toggleVoiceInput() {
+      const SpeechRecognitionClass = getSpeechRecognitionClass();
+      if (!SpeechRecognitionClass) {
+        alert('大変申し訳ございません。お使いのブラウザは音声入力に対応していません。パソコンの場合は Google Chrome をお使いください。');
+        return;
+      }
+      if (isVoiceInputActive) {
+        if (speechRecognizer) speechRecognizer.stop();
+        return;
+      }
+      startVoiceInput(SpeechRecognitionClass);
+    }
+
+    function startVoiceInput(SpeechRecognitionClass) {
+      const input = document.getElementById('chat-input');
+      const btn = document.getElementById('voice-input-btn');
+      const baseText = input.value.trim();
+
+      speechRecognizer = new SpeechRecognitionClass();
+      speechRecognizer.lang = 'ja-JP';
+      speechRecognizer.interimResults = true;
+      speechRecognizer.continuous = false;
+
+      speechRecognizer.onstart = () => {
+        isVoiceInputActive = true;
+        btn.classList.remove('bg-slate-100', 'hover:bg-slate-200', 'text-slate-600');
+        btn.classList.add('bg-red-500', 'hover:bg-red-600', 'text-white');
+        btn.innerHTML = '<i data-lucide="mic" class="w-5 h-5 animate-pulse"></i>';
+        lucide.createIcons();
+        input.placeholder = 'マイクに向かってお話しください...';
+      };
+
+      speechRecognizer.onresult = (event) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        input.value = baseText ? `${baseText} ${transcript}` : transcript;
+      };
+
+      speechRecognizer.onerror = (event) => {
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+          // 無音でのタイムアウトなどは静かに無視します
+          return;
+        }
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          alert('マイクの使用が許可されていません。ブラウザの設定でこのサイトのマイク使用を許可してください。');
+        } else {
+          alert('音声入力でエラーが発生しました。もう一度お試しください。');
+        }
+      };
+
+      speechRecognizer.onend = () => {
+        isVoiceInputActive = false;
+        btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'text-white');
+        btn.classList.add('bg-slate-100', 'hover:bg-slate-200', 'text-slate-600');
+        btn.innerHTML = '<i data-lucide="mic" class="w-5 h-5"></i>';
+        lucide.createIcons();
+        input.placeholder = 'メッセージを入力（大きい文字）...';
+      };
+
+      speechRecognizer.start();
+    }
+
+    // 音声入力に対応していないブラウザでは、混乱を避けるためボタン自体を隠します
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!getSpeechRecognitionClass()) {
+        const btn = document.getElementById('voice-input-btn');
+        if (btn) btn.classList.add('hidden');
+      }
+    });
 
     async function handleSendChat(evt) {
       evt.preventDefault();
