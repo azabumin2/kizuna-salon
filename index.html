@@ -364,6 +364,88 @@
     </div>
   </div>
 
+  <!-- ADMIN: CREATE SALON MODAL -->
+  <div id="create-event-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto">
+
+      <button onclick="closeCreateEventModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="mb-6">
+        <h3 class="font-serif text-2xl font-bold text-salon-primary mb-1 flex items-center">
+          <i data-lucide="plus-circle" class="w-6 h-6 mr-2 text-salon-accent"></i> 新しいサロンを開設
+        </h3>
+        <p class="text-sm text-slate-500">ここで入力した内容がそのまま一覧画面に表示されます</p>
+      </div>
+
+      <form onsubmit="handleCreateEvent(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">タイトル</label>
+          <input type="text" id="new-event-title" required placeholder="【趣味の話】〇〇について語り合う会"
+            class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">カテゴリー</label>
+          <select id="new-event-category" class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary">
+            <option value="hobby">趣味・文化</option>
+            <option value="health">健康・ライフ</option>
+            <option value="travel">旅行・散歩</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">開催日</label>
+            <input type="date" id="new-event-date" required
+              class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">開始時刻</label>
+            <input type="time" id="new-event-start" required
+              class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">終了時刻</label>
+            <input type="time" id="new-event-end" required
+              class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">ナビゲーター(進行役)</label>
+          <input type="text" id="new-event-speakers" required placeholder="例: 高橋 恵子 様（音楽ライター / 60代）"
+            class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">定員</label>
+          <input type="number" id="new-event-max" min="2" max="200" value="50" required
+            class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">画像URL(空欄の場合は既定の画像を使用)</label>
+          <input type="url" id="new-event-image" placeholder="https://..."
+            class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">説明文</label>
+          <textarea id="new-event-desc" rows="3" required placeholder="このサロンでどんなお話をするかを書いてください"
+            class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-salon-primary"></textarea>
+        </div>
+
+        <button type="submit" class="w-full bg-salon-primary hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl text-base shadow-lg flex items-center justify-center space-x-2 transition">
+          <i data-lucide="check" class="w-5 h-5 text-salon-accent"></i>
+          <span>このサロンを開設する</span>
+        </button>
+      </form>
+
+    </div>
+  </div>
+
   <script>
     // =====================================================================
     // 1) 設定エリア - ここを自分の Firebase / Stripe の値に書き換えてください
@@ -403,6 +485,9 @@
     let unsubMessages = null;
     let unsubPresence = null;
     let roomCloseTimer = null;   // 開催時間になったら自動退室させるためのタイマー
+    let eventsList = [];         // Firestore の events コレクションから読み込んだサロン一覧
+    let unsubEvents = null;
+    let currentCategoryFilter = 'all';
 
     // 開始何分前から入室できるようにするか(分)
     const ENTRY_BUFFER_MINUTES = 10;
@@ -432,8 +517,10 @@
       return 'ended';
     }
 
-    // 開催予定のサロン一覧(このアプリでは管理者がこの配列を直接編集して更新します)
-    const sampleEvents = [
+    // 起動時に events コレクションが空の場合だけ使われる「種」データです。
+    // 通常の運用では、この配列を直接編集する必要はありません。
+    // 管理者は画面右上の「サロン作成」ボタンから新しいサロンを追加できます。
+    const seedEvents = [
       {
         id: 'room-1',
         category: 'hobby',
@@ -486,21 +573,70 @@
 
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
+      renderUserStatus();
       if (!isConfigured) {
         document.getElementById('config-warning').classList.remove('hidden');
+        renderEventsGrid(seedEvents);
+        return;
       }
-      renderEventsGrid(sampleEvents);
-      renderUserStatus();
-      if (isConfigured) {
-        updateLiveCounts();
-        auth.getRedirectResult().catch(err => {
-          if (err && err.code && err.code !== 'auth/no-auth-event') {
-            alert('ログインできませんでした: ' + err.message);
-          }
-        });
-        auth.onAuthStateChanged(onAuthChanged);
-      }
+      seedEventsIfNeeded().then(subscribeEvents).catch(err => {
+        console.error('events init error', err);
+        renderEventsGrid(seedEvents);
+      });
+      auth.getRedirectResult().catch(err => {
+        if (err && err.code && err.code !== 'auth/no-auth-event') {
+          alert('ログインできませんでした: ' + err.message);
+        }
+      });
+      auth.onAuthStateChanged(onAuthChanged);
     });
+
+    // 初回起動時、events コレクションがまだ空であれば種データを1回だけ投入します
+    function seedEventsIfNeeded() {
+      return db.collection('events').limit(1).get().then(snap => {
+        if (!snap.empty) return;
+        const batch = db.batch();
+        seedEvents.forEach(evt => {
+          const { id, startAt, endAt, ...rest } = evt;
+          const ref = db.collection('events').doc();
+          batch.set(ref, {
+            ...rest,
+            startAt: firebase.firestore.Timestamp.fromDate(startAt),
+            endAt: firebase.firestore.Timestamp.fromDate(endAt),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        });
+        return batch.commit();
+      });
+    }
+
+    // events コレクションをリアルタイムに購読し、管理者が作成したサロンも
+    // 即座に一覧へ反映します
+    function subscribeEvents() {
+      if (unsubEvents) unsubEvents();
+      unsubEvents = db.collection('events').orderBy('startAt', 'asc').onSnapshot(snap => {
+        eventsList = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            startAt: data.startAt.toDate(),
+            endAt: data.endAt.toDate()
+          };
+        });
+        renderFilteredEvents();
+        updateLiveCounts();
+      }, err => {
+        console.error('events subscribe error', err);
+      });
+    }
+
+    function renderFilteredEvents() {
+      const filtered = currentCategoryFilter === 'all'
+        ? eventsList
+        : eventsList.filter(e => e.category === currentCategoryFilter);
+      renderEventsGrid(filtered);
+    }
 
     // =====================================================================
     // 3) 認証(ログイン) まわり
@@ -560,6 +696,7 @@
           isPaidMember: false,
           ticketCredits: 0,
           freeTrialUsed: false,
+          isAdmin: false,   // 管理者権限は Firebase コンソールから手動で true にしてください(悪用防止のため)
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
         await ref.set(data);
@@ -663,9 +800,15 @@
                     <i data-lucide="user-check" class="w-4 h-4"></i><span>会員登録・決済</span></button>`;
       }
 
+      const adminBtn = (myProfile && myProfile.isAdmin)
+        ? `<button onclick="openCreateEventModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow transition flex items-center space-x-1">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i><span>サロン作成</span></button>`
+        : '';
+
       container.innerHTML = `
         <div class="flex items-center space-x-2">
           <span class="text-sm text-slate-200 hidden sm:inline">${escapeHtml(user.displayName || '')} 様</span>
+          ${adminBtn}
           ${badge}
           <button onclick="logout()" class="text-xs text-slate-400 hover:text-white underline">ログアウト</button>
         </div>`;
@@ -679,6 +822,10 @@
           <div>
             <div class="relative h-48 w-full overflow-hidden bg-slate-100">
               <img src="${evt.image}" alt="${escapeHtml(evt.title)}" class="w-full h-full object-cover" />
+              ${(myProfile && myProfile.isAdmin) ? `
+              <button onclick="deleteEvent('${evt.id}')" title="このサロンを削除" class="absolute top-3 right-3 bg-red-600/90 hover:bg-red-700 text-white p-1.5 rounded-full shadow z-10">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>` : ''}
               <div class="absolute top-3 left-3 flex space-x-2">
                 ${phase === 'live'
                   ? `<span class="bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center shadow">
@@ -734,7 +881,7 @@
 
     // 各サロンの現在の参加人数を(スナップショットではなく)一度だけ取得して表示
     async function updateLiveCounts() {
-      for (const evt of sampleEvents) {
+      for (const evt of eventsList) {
         try {
           const snap = await db.collection('rooms').doc(evt.id).collection('presence').get();
           const el = document.getElementById(`count-${evt.id}`);
@@ -744,6 +891,7 @@
     }
 
     function filterCategory(cat) {
+      currentCategoryFilter = cat;
       document.querySelectorAll('.cat-btn').forEach(btn => {
         btn.classList.remove('active', 'bg-salon-primary', 'text-white');
         btn.classList.add('bg-white', 'border', 'border-slate-300', 'text-slate-700');
@@ -751,8 +899,7 @@
       event.target.classList.add('active', 'bg-salon-primary', 'text-white');
       event.target.classList.remove('bg-white', 'border', 'border-slate-300', 'text-slate-700');
 
-      const filtered = cat === 'all' ? sampleEvents : sampleEvents.filter(e => e.category === cat);
-      renderEventsGrid(filtered);
+      renderFilteredEvents();
       if (isConfigured) updateLiveCounts();
     }
 
@@ -761,7 +908,7 @@
     // =====================================================================
     async function tryEnterRoom(eventId) {
       if (!isConfigured) { alert('Firebase の設定が完了していません。SETUP_GUIDE.md をご確認ください。'); return; }
-      const evt = sampleEvents.find(e => e.id === eventId);
+      const evt = eventsList.find(e => e.id === eventId);
 
       const phase = getEventPhase(evt);
       if (phase === 'before') {
@@ -914,6 +1061,86 @@
     }
     function closePaymentModal() {
       document.getElementById('payment-modal').classList.add('hidden');
+    }
+
+    // =====================================================================
+    // 6.5) 管理者機能(サロンの作成・削除)
+    //    myProfile.isAdmin が true の会員だけがこの操作を行えます。
+    //    isAdmin は悪用防止のため、アプリの画面からは変更できません。
+    //    Firebase コンソールの Firestore データ画面で、対象の会員の
+    //    users/{uid} ドキュメントに isAdmin(boolean) = true を
+    //    手動で追加することで管理者にできます。
+    // =====================================================================
+    function openCreateEventModal() {
+      if (!myProfile || !myProfile.isAdmin) { alert('この機能は管理者のみご利用いただけます。'); return; }
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      document.getElementById('new-event-date').value = `${yyyy}-${mm}-${dd}`;
+      document.getElementById('create-event-modal').classList.remove('hidden');
+    }
+    function closeCreateEventModal() {
+      document.getElementById('create-event-modal').classList.add('hidden');
+    }
+
+    async function handleCreateEvent(evt) {
+      evt.preventDefault();
+      if (!myProfile || !myProfile.isAdmin) { alert('この機能は管理者のみご利用いただけます。'); return; }
+
+      const title = document.getElementById('new-event-title').value.trim();
+      const category = document.getElementById('new-event-category').value;
+      const dateStr = document.getElementById('new-event-date').value;
+      const startStr = document.getElementById('new-event-start').value;
+      const endStr = document.getElementById('new-event-end').value;
+      const speakers = document.getElementById('new-event-speakers').value.trim();
+      const maxParticipants = parseInt(document.getElementById('new-event-max').value, 10) || 50;
+      const image = document.getElementById('new-event-image').value.trim()
+        || 'https://images.unsplash.com/photo-1543269865-cbf427effbad?w=500&auto=format&fit=crop&q=80';
+      const desc = document.getElementById('new-event-desc').value.trim();
+
+      if (!title || !dateStr || !startStr || !endStr || !speakers || !desc) {
+        alert('すべての必須項目を入力してください。');
+        return;
+      }
+
+      const startAt = new Date(`${dateStr}T${startStr}:00`);
+      const endAt = new Date(`${dateStr}T${endStr}:00`);
+      if (endAt.getTime() <= startAt.getTime()) {
+        alert('終了時刻は開始時刻より後にしてください。');
+        return;
+      }
+
+      const timeLabel = `${dateStr.replace(/-/g, '/')} ${startStr} 〜 ${endStr}`;
+
+      try {
+        await db.collection('events').add({
+          title, category, speakers, desc,
+          time: timeLabel,
+          maxParticipants,
+          image,
+          startAt: firebase.firestore.Timestamp.fromDate(startAt),
+          endAt: firebase.firestore.Timestamp.fromDate(endAt),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          createdBy: auth.currentUser.uid
+        });
+        evt.target.reset();
+        closeCreateEventModal();
+        showToast('新しいサロンを開設しました。');
+      } catch (err) {
+        alert('サロンの作成に失敗しました: ' + err.message);
+      }
+    }
+
+    async function deleteEvent(eventId) {
+      if (!myProfile || !myProfile.isAdmin) { alert('この機能は管理者のみご利用いただけます。'); return; }
+      if (!confirm('このサロンを削除しますか？この操作は取り消せません。')) return;
+      try {
+        await db.collection('events').doc(eventId).delete();
+        showToast('サロンを削除しました。');
+      } catch (err) {
+        alert('削除に失敗しました: ' + err.message);
+      }
     }
 
     function goToCheckout() {
