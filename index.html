@@ -282,6 +282,13 @@
           <form onsubmit="handleSendChat(event)" class="p-3 bg-white border-t border-slate-200 rounded-b-2xl flex items-center space-x-2">
             <button
               type="button"
+              id="voice-lang-toggle"
+              onclick="toggleVoiceInputLang()"
+              title="音声入力の言語を切り替え"
+              class="bg-slate-100 hover:bg-slate-200 text-slate-500 text-[11px] font-bold px-2 py-3 rounded-xl shrink-0 transition"
+            >JP</button>
+            <button
+              type="button"
               id="voice-input-btn"
               onclick="toggleVoiceInput()"
               title="音声で入力する"
@@ -306,6 +313,102 @@
     </section>
 
   </main>
+
+  <!-- FOOTER -->
+  <footer class="bg-slate-100 border-t border-slate-200 py-6 mt-8">
+    <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
+      <p>&copy; 2026 絆サロン運営事務局</p>
+      <button onclick="openTermsModal()" class="text-salon-primary font-bold hover:underline flex items-center">
+        <i data-lucide="file-text" class="w-4 h-4 mr-1.5"></i>
+        会員規約・利用ルール
+      </button>
+    </div>
+  </footer>
+
+  <!-- TERMS OF SERVICE MODAL -->
+  <div id="terms-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative max-h-[85vh] overflow-y-auto">
+
+      <button onclick="closeTermsModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="text-center mb-6">
+        <h3 class="font-serif text-2xl font-bold text-salon-primary mb-1">「おとなの45分カフェ」会員規約・利用ルール</h3>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-relaxed">
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第1条（目的）</h4>
+          <p>本規約は、「おとなの45分カフェ」（以下、「本サービス」）が提供するオンラインコミュニティおよび対話ルームの利用条件を定めるものです。本サービスは、60歳以上の会員が安心・健全に交流し、温かい対話を楽しむ場を提供することを目的とします。</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第2条（会員資格および年齢確認）</h4>
+          <ol class="list-decimal list-inside space-y-1">
+            <li>本サービスの会員対象は、満60歳以上の方とします。</li>
+            <li>入会にあたり、公的証明書（運転免許証、マイナンバーカード等）による年齢確認を実施する場合があります。</li>
+            <li>虚偽の情報を登録した場合、事前通知なく会員資格を取り消すことがあります。</li>
+          </ol>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第3条（料金体系および決済）</h4>
+          <ol class="list-decimal list-inside space-y-1">
+            <li>体験会員: 初回1回（45分）無料。</li>
+            <li>一般会員: 1回参加につき550円（税込）。</li>
+            <li>定期会員: 月額3,300円（税込）。対象の45分トークルームへ無制限で予約・参加が可能です。</li>
+            <li>決済はクレジットカード、PayPay、その他当社が指定する方法にて行います。</li>
+            <li>月額利用料は、解約手続きが行われない限り自動更新されます。</li>
+          </ol>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第4条（予約およびキャンセル）</h4>
+          <ol class="list-decimal list-inside space-y-1">
+            <li>各トークルームは品質維持のため、定員（原則6名〜8名）を設けた完全予約制です。</li>
+            <li>キャンセルは開始時間の2時間前までに行ってください。無断キャンセルが続く場合、予約制限を行うことがあります。</li>
+          </ol>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第5条（禁止事項）</h4>
+          <p class="mb-1">会員は、本サービスの利用にあたり、以下の行為を行ってはなりません。</p>
+          <ol class="list-decimal list-inside space-y-1">
+            <li>宗教の勧誘、政治的活動、またはネットワークビジネス・営業・販売行為</li>
+            <li>金銭の貸借、投資の勧誘、その他金銭的リスクを伴う行為</li>
+            <li>他の会員に対する誹謗中傷、暴言、ハラスメント、プライバシーの侵害</li>
+            <li>過度な個人情報の聞き出しや、相手が嫌がる連絡の継続</li>
+            <li>公序良俗に反する発言や、他の会員の不快感を煽る行為</li>
+          </ol>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第6条（違反時の措置）</h4>
+          <p class="mb-1">第5条の禁止事項に違反した場合、運営管理者の判断により、以下の措置を取ることができるものとします。</p>
+          <ol class="list-decimal list-inside space-y-1">
+            <li>該当発言の削除および注意・警告</li>
+            <li>トークルームからの強制退室</li>
+            <li>会員資格の停止または強制退会（この場合、支払済みの利用料は返金いたしません）</li>
+          </ol>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第7条（個人情報の取り扱い）</h4>
+          <p>運営者は、会員の個人情報を適切に管理し、本サービスの運営およびご案内以外の目的で第三者に提供することはありません。</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-salon-primary mb-1">第8条（免責事項）</h4>
+          <ol class="list-decimal list-inside space-y-1">
+            <li>会員同士のトラブルについて、運営者は原則として当事者間での解決を求め、重大な規約違反がない限り責任を負いません。</li>
+            <li>システム障害や通信環境の悪化によりサービスが中断した場合、速やかに復旧に努めますが、損害賠償の義務は負わないものとします。</li>
+          </ol>
+        </div>
+      </div>
+
+    </div>
+  </div>
 
   <!-- PAYMENT & MEMBERSHIP MODAL -->
   <div id="payment-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
@@ -1063,6 +1166,14 @@
       document.getElementById('payment-modal').classList.add('hidden');
     }
 
+    // 会員規約・利用ルール モーダル(誰でも閲覧可能)
+    function openTermsModal() {
+      document.getElementById('terms-modal').classList.remove('hidden');
+    }
+    function closeTermsModal() {
+      document.getElementById('terms-modal').classList.add('hidden');
+    }
+
     // =====================================================================
     // 6.5) 管理者機能(サロンの作成・削除)
     //    myProfile.isAdmin が true の会員だけがこの操作を行えます。
@@ -1264,6 +1375,28 @@
     // =====================================================================
     let speechRecognizer = null;
     let isVoiceInputActive = false;
+    let voiceInputLang = 'ja-JP';   // 'ja-JP'(日本語) または 'ko-KR'(韓国語)
+
+    // 言語ボタンをタップするたびに 日本語 <-> 韓国語 を切り替えます
+    // (実際の会員は日本語をお使いになるため、通常は日本語のままで問題ありません。
+    //  韓国語でテストしたい場合などにこのボタンで切り替えてください。)
+    function toggleVoiceInputLang() {
+      voiceInputLang = (voiceInputLang === 'ja-JP') ? 'ko-KR' : 'ja-JP';
+      updateVoiceLangButton();
+      try { localStorage.setItem('kizuna_voice_lang', voiceInputLang); } catch (e) {}
+    }
+
+    function updateVoiceLangButton() {
+      const btn = document.getElementById('voice-lang-toggle');
+      if (!btn) return;
+      if (voiceInputLang === 'ja-JP') {
+        btn.innerText = 'JP';
+        btn.title = '音声入力の言語: 日本語(タップで韓国語に切替)';
+      } else {
+        btn.innerText = 'KR';
+        btn.title = '音声入力の言語: 한국어(탭하면 일본어로 전환)';
+      }
+    }
 
     function getSpeechRecognitionClass() {
       return window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -1288,7 +1421,7 @@
       const baseText = input.value.trim();
 
       speechRecognizer = new SpeechRecognitionClass();
-      speechRecognizer.lang = 'ja-JP';
+      speechRecognizer.lang = voiceInputLang;
       speechRecognizer.interimResults = true;
       speechRecognizer.continuous = false;
 
@@ -1338,7 +1471,15 @@
       if (!getSpeechRecognitionClass()) {
         const btn = document.getElementById('voice-input-btn');
         if (btn) btn.classList.add('hidden');
+        const langBtn = document.getElementById('voice-lang-toggle');
+        if (langBtn) langBtn.classList.add('hidden');
+        return;
       }
+      try {
+        const savedLang = localStorage.getItem('kizuna_voice_lang');
+        if (savedLang === 'ja-JP' || savedLang === 'ko-KR') voiceInputLang = savedLang;
+      } catch (e) {}
+      updateVoiceLangButton();
     });
 
     async function handleSendChat(evt) {
